@@ -1,5 +1,7 @@
 package main
-import ("fmt")
+import ("fmt"
+"io" 
+)
 
 func main(){
 	a := 8.8
