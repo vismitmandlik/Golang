@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -26,11 +25,11 @@ type Device struct {
 }
 
 type Metrics struct {
-	DeviceID    string  `json:"deviceId"`
-	CPUUsage    float64 `json:"cpuUsage"`
-	MemoryUsage float64 `json:"memoryUsage"`
-	DiskUsage   float64 `json:"diskUsage"`
-	Timestamp   int64   `json:"timestamp"`
+	DeviceID    string `json:"deviceId"`
+	CPUUsage    string `json:"cpuUsage"`
+	MemoryUsage string `json:"memoryUsage"`
+	DiskUsage   string `json:"diskUsage"`
+	Timestamp   int64  `json:"timestamp"`
 }
 
 // Parse command-line arguments to read device details
@@ -49,9 +48,25 @@ func parseCommandLineArgs() ([]Device, error) {
 	return devices, nil
 }
 
+// Run SSH command and capture output
+func runSshCommand(client *ssh.Client, cmd string) (string, error) {
+	// Create a new session for each command
+	session, err := client.NewSession()
+	if err != nil {
+		return "", fmt.Errorf("failed to create session: %v", err)
+	}
+	defer session.Close()
+
+	output, err := session.CombinedOutput(cmd)
+	if err != nil {
+		return "", fmt.Errorf("error running cmd '%s': %s", cmd, err)
+	}
+	return string(output), nil
+}
+
 // Establish SSH connection
-func sshConnect(device Device) (*ssh.Session, error) {
-	config := &ssh.ClientConfig{
+func sshConnect(device Device) (*ssh.Client, error) {
+	cfg := &ssh.ClientConfig{
 		User: device.Credentials.Username,
 		Auth: []ssh.AuthMethod{
 			ssh.Password(device.Credentials.Password),
@@ -59,84 +74,75 @@ func sshConnect(device Device) (*ssh.Session, error) {
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
 
-	conn, err := ssh.Dial("tcp", fmt.Sprintf("%s:%d", device.IP, device.Port), config)
+	client, err := ssh.Dial("tcp", fmt.Sprintf("%s:%d", device.IP, device.Port), cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to device %s: %w", device.ID, err)
 	}
-
-	session, err := conn.NewSession()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create session for device %s: %w", device.ID, err)
-	}
-
-	return session, nil
+	return client, nil
 }
 
-// Parse the `top` output to extract CPU, Memory, and Disk usage metrics
-func parseTopOutput(output string) (float64, float64, float64) {
-	var cpuUsage, memoryUsage, diskUsage float64
-	lines := strings.Split(output, "\n")
-
-	for _, line := range lines {
-		if strings.HasPrefix(line, "%Cpu(s):") {
-			// Extract idle percentage and calculate CPU usage
-			parts := strings.Fields(line)
-			if len(parts) > 3 {
-				idle, _ := strconv.ParseFloat(strings.TrimSuffix(parts[3], ","), 64)
-				cpuUsage = 100.0 - idle
-			}
-		}
-
-		if strings.HasPrefix(line, "MiB Mem :") {
-			// Extract memory usage
-			parts := strings.Fields(line)
-			if len(parts) > 6 {
-				totalMem, _ := strconv.ParseFloat(parts[1], 64)
-				usedMem, _ := strconv.ParseFloat(parts[5], 64)
-				if totalMem > 0 {
-					memoryUsage = (usedMem / totalMem) * 100
-				}
-			}
-		}
-
-		if strings.HasPrefix(line, "MiB Swap:") {
-			// Extract disk usage under Swap
-			parts := strings.Fields(line)
-			if len(parts) > 6 {
-				totalSwap, _ := strconv.ParseFloat(parts[1], 64)
-				usedSwap, _ := strconv.ParseFloat(parts[5], 64)
-				if totalSwap > 0 {
-					diskUsage = (usedSwap / totalSwap) * 100
-				}
-			}
-		}
+// Get CPU usage percentage using the provided command
+func getCPUUsage(device Device, client *ssh.Client) (string, error) {
+	cmd := "top -b -n 1 | grep 'Cpu(s)' | awk '{usage=100-$8; printf(\"%.2f\\n\", usage)}'"
+	output, err := runSshCommand(client, cmd)
+	if err != nil {
+		return "", fmt.Errorf("error getting CPU usage for device %s: %v", device.ID, err)
 	}
-	return cpuUsage, memoryUsage, diskUsage
+	return strings.TrimSpace(output), nil
+}
+
+// Get memory usage percentage using the provided command
+func getMemoryUsage(device Device, client *ssh.Client) (string, error) {
+	cmd := "free | grep Mem | awk '{usage=($3/$2)*100; printf(\"%.2f\\n\", usage)}'"
+	output, err := runSshCommand(client, cmd)
+	if err != nil {
+		return "", fmt.Errorf("error getting memory usage for device %s: %v", device.ID, err)
+	}
+	return strings.TrimSpace(output), nil
+}
+
+// Get disk usage percentage using the provided command
+func getDiskUsage(device Device, client *ssh.Client) (string, error) {
+	cmd := "df --total | tail -1 | awk '{print $5}'"
+	output, err := runSshCommand(client, cmd)
+	if err != nil {
+		return "", fmt.Errorf("error getting disk usage for device %s: %v", device.ID, err)
+	}
+	return strings.TrimSpace(output), nil
 }
 
 // Fetch metrics for a single device
 func fetchMetrics(device Device, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	log.Printf("Connecting to device: %s (%s)", device.ID, device.IP)
-
-	session, err := sshConnect(device)
+	// Establish SSH connection
+	client, err := sshConnect(device)
 	if err != nil {
 		log.Printf("Error connecting to device %s: %v", device.ID, err)
 		return
 	}
-	defer session.Close()
+	defer client.Close()
 
-	// Run the `top` command to fetch metrics
-	output, err := session.CombinedOutput("top -b -n 1")
+	// Get CPU usage
+	cpuUsage, err := getCPUUsage(device, client)
 	if err != nil {
-		log.Printf("Error executing top command for device %s: %v", device.ID, err)
+		log.Printf("Error getting CPU usage for device %s: %v", device.ID, err)
 		return
 	}
-	fmt.Print("Output of top is ", output)
 
-	// Parse the metrics from `top` output
-	cpuUsage, memoryUsage, diskUsage := parseTopOutput(string(output))
+	// Get memory usage
+	memoryUsage, err := getMemoryUsage(device, client)
+	if err != nil {
+		log.Printf("Error getting memory usage for device %s: %v", device.ID, err)
+		return
+	}
+
+	// Get disk usage
+	diskUsage, err := getDiskUsage(device, client)
+	if err != nil {
+		log.Printf("Error getting disk usage for device %s: %v", device.ID, err)
+		return
+	}
 
 	// Prepare metrics structure
 	metrics := Metrics{
