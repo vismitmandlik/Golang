@@ -13,12 +13,14 @@ import (
 
 // Shared data structures
 type Credentials struct {
+
 	Username string `json:"username"`
 
 	Password string `json:"password"`
 }
 
 type Device struct {
+
 	ID string `json:"_id"`
 
 	IP string `json:"ip"`
@@ -29,6 +31,7 @@ type Device struct {
 }
 
 type Metrics struct {
+	
 	DeviceID string `json:"deviceId"`
 
 	IP string `json:"ip"`
@@ -43,6 +46,7 @@ type Metrics struct {
 }
 
 type IpCredential struct {
+
 	Ip string `json:"ip"`
 
 	Port int `json:"port"`
@@ -84,40 +88,40 @@ func fetchMetrics(device Device, wg *sync.WaitGroup) {
 
 	defer wg.Done()
 
-	client, err := sshConnect(device)
+	client, error := sshConnect(device)
 
-	if err != nil {
+	if error != nil {
 
-		fmt.Printf("Error connecting to device %s: %v\n", device.ID, err)
+		fmt.Printf("Error connecting to device %s: %v\n", device.ID, error)
 
 		return
 	}
 
 	defer client.Close()
 
-	cpuUsage, err := getCPUUsage(device, client)
+	cpuUsage, error := getCPUUsage(device, client)
 
-	if err != nil {
+	if error != nil {
 
-		fmt.Printf("Error getting CPU usage for device %s: %v\n", device.ID, err)
-
-		return
-	}
-
-	memoryUsage, err := getMemoryUsage(device, client)
-
-	if err != nil {
-
-		fmt.Printf("Error getting memory usage for device %s: %v\n", device.ID, err)
+		fmt.Printf("Error getting CPU usage for device %s: %v\n", device.ID, error)
 
 		return
 	}
 
-	diskUsage, err := getDiskUsage(device, client)
+	memoryUsage, error := getMemoryUsage(device, client)
 
-	if err != nil {
+	if error != nil {
 
-		fmt.Printf("Error getting disk usage for device %s: %v\n", device.ID, err)
+		fmt.Printf("Error getting memory usage for device %s: %v\n", device.ID, error)
+
+		return
+	}
+
+	diskUsage, error := getDiskUsage(device, client)
+
+	if error != nil {
+
+		fmt.Printf("Error getting disk usage for device %s: %v\n", device.ID, error)
 
 		return
 	}
@@ -199,9 +203,9 @@ func sshConnect(device Device) (*ssh.Client, error) {
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
 
-	client, err := ssh.Dial("tcp", fmt.Sprintf("%s:%d", device.IP, device.Port), cfg)
+	client, error := ssh.Dial("tcp", fmt.Sprintf("%s:%d", device.IP, device.Port), cfg)
 
-	if err != nil {
+	if error != nil {
 
 		return nil, fmt.Errorf("failed to connect to device %s: %w", device.ID, err)
 	}
@@ -225,9 +229,9 @@ func trySSH(ip string, port int, username, password string) bool {
 
 	addr := fmt.Sprintf("%s:%d", ip, port)
 
-	client, err := ssh.Dial("tcp", addr, config)
+	client, error := ssh.Dial("tcp", addr, config)
 
-	if err != nil {
+	if error != nil {
 
 		return false
 	}
@@ -260,20 +264,20 @@ func getDiskUsage(device Device, client *ssh.Client) (string, error) {
 
 func runSshCommand(client *ssh.Client, cmd string) (string, error) {
 
-	session, err := client.NewSession()
+	session, error := client.NewSession()
 
-	if err != nil {
+	if error != nil {
 
-		return "", fmt.Errorf("failed to create session: %v", err)
+		return "", fmt.Errorf("failed to create session: %v", error)
 	}
 
 	defer session.Close()
 
-	output, err := session.CombinedOutput(cmd)
+	output, error := session.CombinedOutput(cmd)
 
-	if err != nil {
+	if error != nil {
 
-		return "", fmt.Errorf("error running cmd '%s': %s", cmd, err)
+		return "", fmt.Errorf("error running cmd '%s': %s", cmd, error)
 	}
 
 	return strings.TrimSpace(string(output)), nil
@@ -281,11 +285,11 @@ func runSshCommand(client *ssh.Client, cmd string) (string, error) {
 
 func main() {
 
-	eventName, input, err := parseCommandLineArgs()
+	eventName, input, error := parseCommandLineArgs()
 
-	if err != nil {
+	if error != nil {
 
-		fmt.Printf("Error: %v\n", err)
+		fmt.Printf("Error: %v\n", error)
 
 		return
 	}
@@ -296,11 +300,11 @@ func main() {
 
 		var devices []Device
 
-		err := json.Unmarshal([]byte(input), &devices)
+		error := json.Unmarshal([]byte(input), &devices)
 
-		if err != nil {
+		if error != nil {
 
-			fmt.Printf("Error parsing devices: %v\n", err)
+			fmt.Printf("Error parsing devices: %v\n", error)
 
 			return
 		}
@@ -311,11 +315,11 @@ func main() {
 
 		var ipCred IpCredential
 
-		err := json.Unmarshal([]byte(input), &ipCred)
+		error := json.Unmarshal([]byte(input), &ipCred)
 
-		if err != nil {
+		if error != nil {
 
-			fmt.Printf("Error parsing IP credentials: %v\n", err)
+			fmt.Printf("Error parsing IP credentials: %v\n", error)
 
 			return
 		}
