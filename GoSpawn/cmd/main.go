@@ -13,14 +13,12 @@ import (
 
 // Shared data structures
 type Credentials struct {
-
 	Username string `json:"username"`
 
 	Password string `json:"password"`
 }
 
 type Device struct {
-
 	ID string `json:"_id"`
 
 	IP string `json:"ip"`
@@ -31,7 +29,6 @@ type Device struct {
 }
 
 type Metrics struct {
-	
 	DeviceID string `json:"deviceId"`
 
 	IP string `json:"ip"`
@@ -46,7 +43,6 @@ type Metrics struct {
 }
 
 type IpCredential struct {
-
 	Ip string `json:"ip"`
 
 	Port int `json:"port"`
@@ -99,7 +95,7 @@ func fetchMetrics(device Device, wg *sync.WaitGroup) {
 
 	defer client.Close()
 
-	cpuUsage, error := getCPUUsage(device, client)
+	cpuUsage, error := getCPUUsage( client)
 
 	if error != nil {
 
@@ -108,7 +104,7 @@ func fetchMetrics(device Device, wg *sync.WaitGroup) {
 		return
 	}
 
-	memoryUsage, error := getMemoryUsage(device, client)
+	memoryUsage, error := getMemoryUsage(client)
 
 	if error != nil {
 
@@ -117,7 +113,7 @@ func fetchMetrics(device Device, wg *sync.WaitGroup) {
 		return
 	}
 
-	diskUsage, error := getDiskUsage(device, client)
+	diskUsage, error := getDiskUsage(client)
 
 	if error != nil {
 
@@ -184,8 +180,6 @@ func runDiscovery(ipCred IpCredential) {
 	}
 
 	wg.Wait()
-
-	fmt.Println("Processing complete.")
 }
 
 // Shared SSH utilities
@@ -207,7 +201,7 @@ func sshConnect(device Device) (*ssh.Client, error) {
 
 	if error != nil {
 
-		return nil, fmt.Errorf("failed to connect to device %s: %w", device.ID, err)
+		return nil, fmt.Errorf("failed to connect to device %s: %w", device.ID, error)
 	}
 
 	return client, nil
@@ -241,21 +235,21 @@ func trySSH(ip string, port int, username, password string) bool {
 	return true
 }
 
-func getCPUUsage(device Device, client *ssh.Client) (string, error) {
+func getCPUUsage(client *ssh.Client) (string, error) {
 
 	cmd := "top -b -n 1 | grep 'Cpu(s)' | awk '{usage=100-$8; printf(\"%.2f\\n\", usage)}'"
 
 	return runSshCommand(client, cmd)
 }
 
-func getMemoryUsage(device Device, client *ssh.Client) (string, error) {
+func getMemoryUsage(client *ssh.Client) (string, error) {
 
 	cmd := "free | grep Mem | awk '{usage=($3/$2)*100; printf(\"%.2f\\n\", usage)}'"
 
 	return runSshCommand(client, cmd)
 }
 
-func getDiskUsage(device Device, client *ssh.Client) (string, error) {
+func getDiskUsage(client *ssh.Client) (string, error) {
 
 	cmd := "df --total | tail -1 | awk '{print $5}'"
 
