@@ -19,7 +19,7 @@ type Credentials struct {
 }
 
 type Device struct {
-	ID string `json:"_id"`
+	ID string `json:"objectId"`
 
 	IP string `json:"ip"`
 
@@ -29,7 +29,7 @@ type Device struct {
 }
 
 type Metrics struct {
-	DeviceID string `json:"deviceId"`
+	ObjectID string `json:"objectId"`
 
 	IP string `json:"ip"`
 
@@ -95,7 +95,7 @@ func fetchMetrics(device Device, wg *sync.WaitGroup) {
 
 	defer client.Close()
 
-	cpuUsage, error := getCPUUsage( client)
+	cpuUsage, error := getCPUUsage(client)
 
 	if error != nil {
 
@@ -124,7 +124,7 @@ func fetchMetrics(device Device, wg *sync.WaitGroup) {
 
 	metrics := Metrics{
 
-		DeviceID: device.ID,
+		ObjectID: device.ID,
 
 		IP: device.IP,
 
@@ -237,6 +237,10 @@ func trySSH(ip string, port int, username, password string) bool {
 
 func getCPUUsage(client *ssh.Client) (string, error) {
 
+	/* Uses `top` to get CPU stats, `grep` to filter the CPU line,
+	`awk` to calculate active CPU usage (100 - idle%)
+	and format it to 2 decimal places. */
+
 	cmd := "top -b -n 1 | grep 'Cpu(s)' | awk '{usage=100-$8; printf(\"%.2f\\n\", usage)}'"
 
 	return runSshCommand(client, cmd)
@@ -244,12 +248,19 @@ func getCPUUsage(client *ssh.Client) (string, error) {
 
 func getMemoryUsage(client *ssh.Client) (string, error) {
 
+	/*  Uses `free` to get memory stats, `grep` to filter the memory line,
+	and `awk` to calculate memory usage percentage (used/total) and format it to 2 decimal places.*/
+
 	cmd := "free | grep Mem | awk '{usage=($3/$2)*100; printf(\"%.2f\\n\", usage)}'"
 
 	return runSshCommand(client, cmd)
 }
 
 func getDiskUsage(client *ssh.Client) (string, error) {
+
+	/* Uses `df --total` to get disk stats,
+	`tail -1` to isolate the last line (total),
+	and `awk` to print the disk usage percentage. */
 
 	cmd := "df --total | tail -1 | awk '{print $5}'"
 

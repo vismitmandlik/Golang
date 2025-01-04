@@ -4,23 +4,21 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	_ "net/http/pprof"
+	_ "net/http/pprof" // Import pprof to register its handlers
 	"time"
 )
 
 func main() {
-
+	// Start an HTTP server for pprof
 	go func() {
-
-		log.Println(http.ListenAndServe("localhost:8080", nil))
+		fmt.Println("Starting pprof server on localhost:6060")
+		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
 
-	// Simulate some work in the main program
+	// Simulate some work
 	for i := 0; i < 1000000; i++ {
-
 		_ = i * 2
-
-		time.Sleep(1 * time.Millisecond)
+		time.Sleep(1 * time.Millisecond) // Simulate some delay
 	}
 
 	fmt.Println("Main function work done.")
