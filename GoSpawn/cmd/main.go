@@ -143,7 +143,7 @@ func fetchMetrics(device Device, wg *sync.WaitGroup) {
 }
 
 // Discovery logic
-func runDiscovery(ipCred IpCredential) {
+func runDiscovery(ipCreds []IpCredential) {
 
 	var wg sync.WaitGroup
 
@@ -151,32 +151,37 @@ func runDiscovery(ipCred IpCredential) {
 
 	successfulIPs := make(map[string]bool)
 
-	for _, cred := range ipCred.Credentials {
+	// Iterate over the array of IpCredential
+	for _, ipCred := range ipCreds {
 
-		wg.Add(1)
+		for _, cred := range ipCred.Credentials {
 
-		go func(ip string, port int, username, password string) {
+			wg.Add(1)
 
-			defer wg.Done()
+			go func(ip string, port int, username, password string) {
 
-			if success := trySSH(ip, port, username, password); success {
+				defer wg.Done()
 
-				mux.Lock()
+				if success := trySSH(ip, port, username, password); success {
 
-				defer mux.Unlock()
+					mux.Lock()
 
-				if !successfulIPs[ip] {
+					defer mux.Unlock()
 
-					successfulIPs[ip] = true
+					if !successfulIPs[ip] {
 
-					successfulCredential := Credentials{Username: username, Password: password}
+						successfulIPs[ip] = true
 
-					jsonData, _ := json.Marshal(successfulCredential)
+						// successfulCredential := Credentials{Username: username, Password: password}
 
-					fmt.Printf("Successful login for IP %s: %s\n", ip, string(jsonData))
+						// jsonData, _ := json.Marshal(successfulCredential)
+
+						// fmt.Printf("Successful login for IP %s: %s\n", ip, string(jsonData))
+						fmt.Printf("IP %s success, Credentials: Username: %s, Password: %s\n", ip, username, password)
+					}
 				}
-			}
-		}(ipCred.Ip, ipCred.Port, cred.Username, cred.Password)
+			}(ipCred.Ip, ipCred.Port, cred.Username, cred.Password)
+		}
 	}
 
 	wg.Wait()
@@ -318,9 +323,9 @@ func main() {
 
 	case "discovery":
 
-		var ipCred IpCredential
+		var ipCreds []IpCredential
 
-		error := json.Unmarshal([]byte(input), &ipCred)
+		error := json.Unmarshal([]byte(input), &ipCreds)
 
 		if error != nil {
 
@@ -329,7 +334,7 @@ func main() {
 			return
 		}
 
-		runDiscovery(ipCred)
+		runDiscovery(ipCreds)
 
 	default:
 
